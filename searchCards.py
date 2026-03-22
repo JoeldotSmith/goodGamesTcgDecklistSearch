@@ -2,6 +2,7 @@ import re
 import urllib.request
 import urllib.parse
 import sys
+import argparse
 
 
 def get_cards(decklist_file):
@@ -77,6 +78,15 @@ def fetch_cheapest(card_name):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--filter-price",
+        type=float,
+        default=None,
+        help="Only show cards cheaper than this price in the main table",
+    )
+    args = parser.parse_args()
+
     decklist_file = "decklist.txt"
     cards = get_cards(decklist_file)
     not_found = []
@@ -110,52 +120,72 @@ def main():
                 )
             )
 
-    # Column headers
-    headers = ("Card Title", "Set", "Condition", "Qty", "Price")
-
-    # Work out max width for each column
-    col_widths = [len(h) for h in headers]
-    for row in results:
-        for i, cell in enumerate(row):
-            col_widths[i] = max(col_widths[i], len(cell))
-
-    # Add padding
-    col_widths = [w + 2 for w in col_widths]
-
-    def format_row(row):
-        return (
-            "│ "
-            + " │ ".join(
-                cell.ljust(col_widths[i])
-                if i < len(row) - 1
-                else cell.rjust(col_widths[i])
-                for i, cell in enumerate(row)
-            )
-            + " │"
-        )
-
-    def divider(left, mid, right):
-        return left + mid.join("─" * (w + 2) for w in col_widths) + right
-
-    total_width = sum(col_widths) + 3 * len(col_widths) + 1
-    title_str = " MTG Card Price Search — Good Games "
-    title_padded = title_str.center(total_width - 2)
-
-    print()
-    print("┌" + title_padded + "┐")
-    print(divider("├", "┬", "┤"))
-    print(format_row(headers))
-    print(divider("├", "┼", "┤"))
     results.sort(key=lambda r: int(r[4].replace("$", "").replace(".", "")))
-    for row in results:
-        print(format_row(row))
 
-    print(divider("├", "┼", "┤"))
+    # Split into filtered/over-budget if flag was passed
+    if args.filter_price is not None:
+        filter_cents = int(args.filter_price * 100)
+        main_results = [
+            r
+            for r in results
+            if int(r[4].replace("$", "").replace(".", "")) < filter_cents
+        ]
+        over_results = [
+            r
+            for r in results
+            if int(r[4].replace("$", "").replace(".", "")) >= filter_cents
+        ]
+    else:
+        main_results = results
+        over_results = []
 
-    total_cents = sum(int(r[4].replace("$", "").replace(".", "")) for r in results)
-    total_row = ("", "", "", "Total", f"${total_cents / 100:.2f}")
-    print(format_row(total_row))
-    print(divider("└", "┴", "┘"))
+    def draw_table(title_str, rows):
+        if not rows:
+            return
+
+        headers = ("Card Title", "Set", "Condition", "Qty", "Price")
+        col_widths = [len(h) for h in headers]
+        for row in rows:
+            for i, cell in enumerate(row):
+                col_widths[i] = max(col_widths[i], len(cell))
+        col_widths = [w + 2 for w in col_widths]
+
+        def format_row(row):
+            return (
+                "│ "
+                + " │ ".join(
+                    cell.ljust(col_widths[i])
+                    if i < len(row) - 1
+                    else cell.rjust(col_widths[i])
+                    for i, cell in enumerate(row)
+                )
+                + " │"
+            )
+
+        def divider(left, mid, right):
+            return left + mid.join("─" * (w + 2) for w in col_widths) + right
+
+        total_width = sum(col_widths) + 3 * len(col_widths) + 1
+        title_padded = f" {title_str} ".center(total_width - 2)
+
+        print()
+        print("┌" + title_padded + "┐")
+        print(divider("├", "┬", "┤"))
+        print(format_row(headers))
+        print(divider("├", "┼", "┤"))
+        for row in rows:
+            print(format_row(row))
+        print(divider("├", "┼", "┤"))
+
+        total_cents = sum(int(r[4].replace("$", "").replace(".", "")) for r in rows)
+        total_row = ("", "", "", "Total", f"${total_cents / 100:.2f}")
+        print(format_row(total_row))
+        print(divider("└", "┴", "┘"))
+
+    draw_table("MTG Card Price Search — Good Games", main_results)
+
+    if over_results:
+        draw_table(f"Filtered Out (≥ ${args.filter_price:.2f})", over_results)
 
     if not_found:
         print("\n── Cards Not Found / Out of Stock ──")
