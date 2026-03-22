@@ -146,6 +146,7 @@ def main():
     print(divider("├", "┬", "┤"))
     print(format_row(headers))
     print(divider("├", "┼", "┤"))
+    results.sort(key=lambda r: int(r[4].replace("$", "").replace(".", "")))
     for row in results:
         print(format_row(row))
 
@@ -154,8 +155,6 @@ def main():
     total_cents = sum(int(r[4].replace("$", "").replace(".", "")) for r in results)
     total_row = ("", "", "", "Total", f"${total_cents / 100:.2f}")
     print(format_row(total_row))
-
-    print(divider("└", "┴", "┘"))
     print(divider("└", "┴", "┘"))
 
     if not_found:
