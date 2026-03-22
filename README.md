@@ -210,3 +210,11 @@ For example the command `python3 searchCards.py --filter-price 5` will only show
   ✗ Winding Way
   ✗ Worm Harvest
 ```
+
+
+
+## Opening Results
+Adding the `--open` flag will open each result that is available and is not filtered out in the browser.
+
+For example the command `python3 searchCards.py --open` will open each result in the browser and so will `python3 searchCards.py --filter-price 5 --open`.
+

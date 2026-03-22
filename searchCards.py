@@ -41,23 +41,22 @@ def fetch_cheapest(card_name):
     best = None  # (title, quantity, condition, price_cents)
 
     for match in matches:
+        # Extract handle
+        handle_match = re.search(r'handle:"([^"]+)"', match)
+        handle = handle_match.group(1) if handle_match else None
+
         # Extract title
         title_match = re.search(r'title:"([^"]+)"', match)
         if not title_match:
             continue
         title = title_match.group(1).replace("\\/\\/", "//")
 
-        # Skip if title doesn't loosely match our card name
         if card_name.lower().split(",")[0].strip() not in title.lower():
             continue
-
-        # Skip art series cards
         if "art series" in title.lower():
             continue
 
-        # Split into individual variant blocks by splitting on {id:
         variant_blocks = re.split(r"(?=\{id:\d+,title:)", match)
-
         for block in variant_blocks:
             cond_match = re.search(r'title:"([^"]+)"', block)
             qty_match = re.search(r"inventory_quantity:(\d+)", block)
@@ -72,7 +71,7 @@ def fetch_cheapest(card_name):
 
             if qty > 0:
                 if best is None or price < best[3]:
-                    best = (title, qty, condition, price)
+                    best = (title, qty, condition, price, handle)
 
     return best, None
 
@@ -85,12 +84,15 @@ def main():
         default=None,
         help="Only show cards cheaper than this price in the main table",
     )
+    parser.add_argument(
+        "--open", action="store_true", help="Open each result in the browser"
+    )
     args = parser.parse_args()
 
     decklist_file = "decklist.txt"
     cards = get_cards(decklist_file)
     not_found = []
-    results = []
+    results = []  # now stores (title, set, condition, qty, price, handle)
 
     for card_name in cards:
         print(f"Searching: {card_name}...", end=" ", flush=True)
@@ -103,7 +105,7 @@ def main():
             print("Not found / out of stock")
             not_found.append(card_name)
         else:
-            title, qty, condition, price_cents = result
+            title, qty, condition, price_cents, handle = result
             print("✓")
 
             set_match = re.search(r"\[([^\]]+)\]$", title)
@@ -117,12 +119,12 @@ def main():
                     condition,
                     str(qty),
                     f"${price_cents / 100:.2f}",
+                    handle,
                 )
             )
 
     results.sort(key=lambda r: int(r[4].replace("$", "").replace(".", "")))
 
-    # Split into filtered/over-budget if flag was passed
     if args.filter_price is not None:
         filter_cents = int(args.filter_price * 100)
         main_results = [
@@ -139,13 +141,15 @@ def main():
         main_results = results
         over_results = []
 
+    # draw_table only uses first 5 cols, handle is index 5
     def draw_table(title_str, rows):
-        if not rows:
+        display_rows = [r[:5] for r in rows]  # strip handle for display
+        if not display_rows:
             return
 
         headers = ("Card Title", "Set", "Condition", "Qty", "Price")
         col_widths = [len(h) for h in headers]
-        for row in rows:
+        for row in display_rows:
             for i, cell in enumerate(row):
                 col_widths[i] = max(col_widths[i], len(cell))
         col_widths = [w + 2 for w in col_widths]
@@ -173,11 +177,13 @@ def main():
         print(divider("├", "┬", "┤"))
         print(format_row(headers))
         print(divider("├", "┼", "┤"))
-        for row in rows:
+        for row in display_rows:
             print(format_row(row))
         print(divider("├", "┼", "┤"))
 
-        total_cents = sum(int(r[4].replace("$", "").replace(".", "")) for r in rows)
+        total_cents = sum(
+            int(r[4].replace("$", "").replace(".", "")) for r in display_rows
+        )
         total_row = ("", "", "", "Total", f"${total_cents / 100:.2f}")
         print(format_row(total_row))
         print(divider("└", "┴", "┘"))
@@ -186,6 +192,18 @@ def main():
 
     if over_results:
         draw_table(f"Filtered Out (≥ ${args.filter_price:.2f})", over_results)
+
+    # Open URLs for main results only
+    if args.open and main_results:
+        print("\nOpening results in browser...")
+        import subprocess, time
+
+        for r in main_results:
+            handle = r[5]
+            if handle:
+                url = f"https://tcg.goodgames.com.au/products/{handle}"
+                subprocess.run(["open", url])  # macOS — use 'xdg-open' on Linux
+                time.sleep(0.3)
 
     if not_found:
         print("\n── Cards Not Found / Out of Stock ──")
