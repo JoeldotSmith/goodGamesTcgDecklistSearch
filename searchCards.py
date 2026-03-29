@@ -99,6 +99,12 @@ def main():
     parser.add_argument(
         "--open", action="store_true", help="Open each result in the browser"
     )
+    parser.add_argument(
+        "--filter-diff",
+        type=float,
+        default=None,
+        help="Only show cards whos price difference from cheapest available and cheapest regardless is less than this value",
+    )
     args = parser.parse_args()
 
     decklist_file = "decklist.txt"
@@ -142,21 +148,34 @@ def main():
 
     results.sort(key=lambda r: int(r[4].replace("$", "").replace(".", "")))
 
+    main_results = results
+    over_results = []
+
     if args.filter_price is not None:
         filter_cents = int(args.filter_price * 100)
-        main_results = [
+        over_results += [
             r
-            for r in results
-            if int(r[4].replace("$", "").replace(".", "")) < filter_cents
-        ]
-        over_results = [
-            r
-            for r in results
+            for r in main_results
             if int(r[4].replace("$", "").replace(".", "")) >= filter_cents
         ]
-    else:
-        main_results = results
-        over_results = []
+        main_results = [
+            r
+            for r in main_results
+            if int(r[4].replace("$", "").replace(".", "")) < filter_cents
+        ]
+
+    if args.filter_diff is not None:
+        filter_cents = int(args.filter_diff * 100)
+        over_results += [
+            r
+            for r in main_results
+            if int(r[6].replace("$", "").replace(".", "")) >= filter_cents
+        ]
+        main_results = [
+            r
+            for r in main_results
+            if int(r[6].replace("$", "").replace(".", "")) < filter_cents
+        ]
 
     # draw_table only uses first 5 cols, handle is index 5
     def draw_table(title_str, rows):
@@ -228,7 +247,7 @@ def main():
     draw_table("MTG Card Price Search — Good Games", main_results)
 
     if over_results:
-        draw_table(f"Filtered Out (≥ ${args.filter_price:.2f})", over_results)
+        draw_table("Filtered Out", over_results)
 
     # Open URLs for main results only
     if args.open and main_results:
