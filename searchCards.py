@@ -40,12 +40,18 @@ def fetch_cheapest(card_name):
 
     best = None  # (title, quantity, condition, price_cents)
 
+    best_nm = None
+    EXCLUDE_CONDITIONS = {
+        "Heavily Played",
+        "Damaged",
+        "Heavily Played Foil",
+        "Damaged Foil",
+    }
+
     for match in matches:
-        # Extract handle
         handle_match = re.search(r'handle:"([^"]+)"', match)
         handle = handle_match.group(1) if handle_match else None
 
-        # Extract title
         title_match = re.search(r'title:"([^"]+)"', match)
         if not title_match:
             continue
@@ -69,11 +75,17 @@ def fetch_cheapest(card_name):
             qty = int(qty_match.group(1))
             price = int(price_match.group(1))
 
-            if qty > 0:
+            # Cheapest in-stock, excluding bad conditions
+            if qty > 0 and condition not in EXCLUDE_CONDITIONS:
                 if best is None or price < best[3]:
                     best = (title, qty, condition, price, handle)
 
-    return best, None
+            # Cheapest NM regardless of stock
+            if condition == "Near Mint":
+                if best_nm is None or price < best_nm:
+                    best_nm = price
+
+    return (best, best_nm), None
 
 
 def main():
@@ -94,6 +106,7 @@ def main():
     not_found = []
     results = []  # now stores (title, set, condition, qty, price, handle)
 
+    print("Total cards:", len(cards))
     for card_name in cards:
         print(f"Searching: {card_name}...", end=" ", flush=True)
         result, error = fetch_cheapest(card_name)
@@ -101,16 +114,18 @@ def main():
         if error:
             print(f"ERROR — {error}")
             not_found.append(card_name)
-        elif result is None:
+        elif result[0] is None:
             print("Not found / out of stock")
             not_found.append(card_name)
         else:
-            title, qty, condition, price_cents, handle = result
+            (title, qty, condition, price_cents, handle), best_nm = result
             print("✓")
 
             set_match = re.search(r"\[([^\]]+)\]$", title)
             set_name = set_match.group(1) if set_match else ""
             clean_title = title[: set_match.start()].strip() if set_match else title
+
+            nm_str = f"${best_nm / 100:.2f}" if best_nm is not None else "N/A"
 
             results.append(
                 (
@@ -119,6 +134,8 @@ def main():
                     condition,
                     str(qty),
                     f"${price_cents / 100:.2f}",
+                    nm_str,
+                    f"+${(price_cents - best_nm if best_nm is not None else 0) / 100:.2f}",
                     handle,
                 )
             )
@@ -143,11 +160,19 @@ def main():
 
     # draw_table only uses first 5 cols, handle is index 5
     def draw_table(title_str, rows):
-        display_rows = [r[:5] for r in rows]  # strip handle for display
+        display_rows = [r[:7] for r in rows]  # strip handle for display
         if not display_rows:
             return
 
-        headers = ("Card Title", "Set", "Condition", "Qty", "Price")
+        headers = (
+            "Card Title",
+            "Set",
+            "Condition",
+            "Qty",
+            "Cheapest Available",
+            "Cheapest Regardless",
+            "Diff",
+        )
         col_widths = [len(h) for h in headers]
         for row in display_rows:
             for i, cell in enumerate(row):
@@ -170,7 +195,9 @@ def main():
             return left + mid.join("─" * (w + 2) for w in col_widths) + right
 
         total_width = sum(col_widths) + 3 * len(col_widths) + 1
-        title_padded = f" {title_str} ".center(total_width - 2)
+        title_padded = f" {title_str + f' ({len(rows)}/{len(cards)} cards)'} ".center(
+            total_width - 2
+        )
 
         print()
         print("┌" + title_padded + "┐")
@@ -184,7 +211,17 @@ def main():
         total_cents = sum(
             int(r[4].replace("$", "").replace(".", "")) for r in display_rows
         )
-        total_row = ("", "", "", "Total", f"${total_cents / 100:.2f}")
+        total_cents_regardless = sum(
+            int(r[5].replace("$", "").replace(".", "")) for r in display_rows
+        )
+        total_row = (
+            "",
+            "",
+            "",
+            "Total",
+            f"${total_cents / 100:.2f}",
+            f"${total_cents_regardless / 100:.2f}",
+        )
         print(format_row(total_row))
         print(divider("└", "┴", "┘"))
 
@@ -199,16 +236,22 @@ def main():
         import subprocess, time
 
         for r in main_results:
-            handle = r[5]
+            handle = r[7]
             if handle:
                 url = f"https://tcg.goodgames.com.au/products/{handle}"
                 subprocess.run(["open", url])  # macOS — use 'xdg-open' on Linux
                 time.sleep(0.3)
 
     if not_found:
-        print("\n── Cards Not Found / Out of Stock ──")
+        print(
+            "\n── Cards Not Found / Out of Stock ["
+            + str(len(not_found))
+            + "/"
+            + str(len(cards))
+            + "] ──"
+        )
         for card in not_found:
-            print(f"  ✗ {card}")
+            print(f"1 {card}")
 
 
 if __name__ == "__main__":
