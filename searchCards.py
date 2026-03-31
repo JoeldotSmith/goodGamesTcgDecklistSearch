@@ -132,7 +132,8 @@ def main():
             clean_title = title[: set_match.start()].strip() if set_match else title
 
             nm_str = f"${best_nm / 100:.2f}" if best_nm is not None else "N/A"
-
+            diff = (price_cents - best_nm if best_nm is not None else 0) / 100
+            sign = "+" if diff >= 0 else "-"
             results.append(
                 (
                     clean_title,
@@ -141,7 +142,7 @@ def main():
                     str(qty),
                     f"${price_cents / 100:.2f}",
                     nm_str,
-                    f"+${(price_cents - best_nm if best_nm is not None else 0) / 100:.2f}",
+                    f"{sign}${abs(diff):.2f}",
                     handle,
                 )
             )
