@@ -6,18 +6,21 @@ import time
 from itertools import combinations
 
 from models import CardResult
+import cardkingdom
 import goodgames
 import mtgmate
    # cents
 POSTAGE = {
     "goodgames": 6_50,
     "mtgmate":   6_00,
+    "cardkingdom": 15_00,
 }
 
 def optimise_order(
     cards: list[str],
     gg_results: dict[str, CardResult],
-    mm_results: dict[str, CardResult],
+    mm_results: dict[str, CardResult], 
+    ck_results: dict[str, CardResult],
     excluded_cards: set[str],  # cards filtered out or not found — skip these
 ) -> None:
     """
@@ -28,6 +31,7 @@ def optimise_order(
     vendor_results = {
         "goodgames": gg_results,
         "mtgmate":   mm_results,
+        "cardkingdom": ck_results,
     }
     vendor_names = list(vendor_results.keys())
 
@@ -174,52 +178,56 @@ def get_cards(decklist_file: str) -> list[str]:
 
 def merge(
     cards: list[str],
-    gg_results: dict[str, CardResult],
+    vendor_results: dict[str, dict[str, CardResult]],
     gg_nm: dict[str, int],
-    mm_results: dict[str, CardResult],
 ) -> tuple[list[dict], list[str]]:
     """
-    For each card pick the cheapest source, annotate with source label.
-    Returns:
-      rows      : list of dicts ready for display/filtering
-      not_found : list of card names unavailable on either site
+    For each card pick the cheapest source across all vendors.
+    vendor_results: dict of vendor_name -> {card_key -> CardResult}
     """
     rows = []
     not_found = []
 
     for card_name in cards:
         key = card_name.lower()
-        gg = gg_results.get(key)
-        mm = mm_results.get(key)
 
-        if gg is None and mm is None:
+        # Find cheapest vendor for this card
+        best_result = None
+        best_vendor = None
+        available_vendors = []
+
+        for vendor_name, results in vendor_results.items():
+            r = results.get(key)
+            if r is not None:
+                available_vendors.append(vendor_name)
+                if best_result is None or r.price_cents < best_result.price_cents:
+                    best_result = r
+                    best_vendor = vendor_name
+
+        if best_result is None:
             not_found.append(card_name)
             continue
 
-        # Pick cheapest
-        if gg is not None and (mm is None or gg.price_cents <= mm.price_cents):
-            best = gg
-            source = "GoodGames"
-        else:
-            best = mm
-            source = "MtgMate"
+        # Source label — show all vendors that have it, highlight the chosen one
+        others = [v for v in available_vendors if v != best_vendor]
+        source = best_vendor + (f" (+{len(others)})" if others else "")
 
         nm_cents = gg_nm.get(key)
         nm_str = f"${nm_cents / 100:.2f}" if nm_cents is not None else "N/A"
-        diff = (best.price_cents - nm_cents) / 100 if nm_cents is not None else 0
+        diff = (best_result.price_cents - nm_cents) / 100 if nm_cents is not None else 0
         sign = "+" if diff >= 0 else "-"
 
         rows.append({
-            "title":     best.card_name,
-            "set":       best.set_name,
-            "condition": best.condition,
-            "qty":       str(best.qty),
-            "price":     best.price_cents,
-            "price_str": f"${best.price_cents / 100:.2f}",
+            "title":     best_result.card_name,
+            "set":       best_result.set_name,
+            "condition": best_result.condition,
+            "qty":       str(best_result.qty),
+            "price":     best_result.price_cents,
+            "price_str": f"${best_result.price_cents / 100:.2f}",
             "nm_str":    nm_str,
             "diff_str":  f"{sign}${abs(diff):.2f}",
             "source":    source,
-            "url":       best.url,
+            "url":       best_result.url,
         })
 
     rows.sort(key=lambda r: r["price"])
@@ -312,11 +320,19 @@ def main():
     cards = get_cards("decklist.txt")
     print(f"Total cards: {len(cards)}\n")
 
-    mm_results = mtgmate.fetch_all(cards)
+    ck_results = cardkingdom.fetch_all(cards)
     print()
     gg_results, gg_nm = goodgames.fetch_all(cards)
+    print()
+    mm_results = mtgmate.fetch_all(cards)
 
-    rows, not_found = merge(cards, gg_results, gg_nm, mm_results)
+    vendor_results = {
+        "goodgames":   gg_results,
+        "mtgmate":     mm_results,
+        "cardkingdom": ck_results,
+    }
+
+    rows, not_found = merge(cards, vendor_results, gg_nm)
     main_rows, over_rows = apply_filters(rows, args.filter_price, args.filter_diff)
 
     draw_table("MTG Card Price Search — GoodGames + MTGMate", main_rows, len(cards))
@@ -339,7 +355,7 @@ def main():
     if args.filter_price is not None or args.filter_diff is not None:
         excluded |= {r["title"].lower() for r in over_rows}
 
-    optimise_order(cards, gg_results, mm_results, excluded)
+    optimise_order(cards, gg_results, mm_results, ck_results, excluded)
 
 
 if __name__ == "__main__":
