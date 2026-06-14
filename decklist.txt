@@ -1,50 +1,10 @@
 1 Octavia, Living Thesis
-1 Curate
-1 Deep Analysis
-1 Defy Gravity
-1 Gigadrowse
-1 Impulse
-1 Looter il-Kor
-1 Moment of Truth
-1 Obsessive Search
-1 Sleight of Hand
-1 Spyglass Siren
-1 Strategic Planning
-1 Treasure Cruise
-1 Chart a Course
-1 Fact or Fiction
-1 Reservoir Kraken
-1 Kiora, the Rising Tide
-1 Redirect
-1 Mission Briefing
-1 Otherworldly Gaze
-1 Shoreline Looter
-1 Thieving Skydiver
-1 Traverse Eternity
-1 Cloud of Faeries
-1 Consider
-1 Invisible Stalker
-1 Talrand, Sky Summoner
-1 Enter the Enigma
-1 Peek
-1 Thought Scour
-1 Whelming Wave
-1 Artful Dodge
-1 Rapid Hybridization
-1 Serum Visions
 1 Frantic Search
-1 Leap
-1 Preordain
-1 Wavebreak Hippocamp
+1 Redirect
+1 Thirst for Discovery
+1 Thieving Skydiver
 1 Engulf the Shore
 1 Archmage Emeritus
 1 Quiet Speculation
 1 Careful Study
-1 Brainstorm
-1 Ghostly Pilferer
-1 Pongify
 1 Shadow Rift
-1 Ponder
-1 Flow State
-1 Malcolm, Alluring Scoundrel
-1 Archmage of Runes

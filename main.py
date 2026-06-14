@@ -21,30 +21,17 @@ def optimise_order(
     vendor_results: dict[str, dict[str, CardResult]],
     excluded_cards: set[str],
 ) -> None:
-    """
-    Find the cheapest combination of vendors (including postage) to source
-    as many of the remaining cards as possible.
-    Prints a breakdown table per vendor for the best solution found.
-    """
     vendor_names = list(vendor_results.keys())
-
-    # Only consider cards that are actually purchaseable
     active_cards = [c for c in cards if c.lower() not in excluded_cards]
-
-    # Cards available on at least one vendor
     sourceable = {
         c for c in active_cards
         if any(c.lower() in vendor_results[v] for v in vendor_names)
     }
 
-    best_cost    = None
-    best_config  = None  # dict: card_lower -> vendor_name
+    best_solution = None  # tuple: (coverage, total_cost, config)
 
-    # Try every non-empty subset of vendors
     for r in range(1, len(vendor_names) + 1):
         for vendor_subset in combinations(vendor_names, r):
-            subset_set = set(vendor_subset)
-
             config = {}
             for card in sourceable:
                 key = card.lower()
@@ -59,21 +46,23 @@ def optimise_order(
                 if cheapest_vendor:
                     config[key] = cheapest_vendor
 
-            # Total cost = sum of card prices + postage for each vendor used
-            vendors_used = set(config.values())
-            card_total   = sum(vendor_results[v][k].price_cents for k, v in config.items())
+            vendors_used  = set(config.values())
+            card_total    = sum(vendor_results[v][k].price_cents for k, v in config.items())
             postage_total = sum(POSTAGE[v] for v in vendors_used)
-            total = card_total + postage_total
+            total         = card_total + postage_total
+            coverage      = len(config)
 
-            if best_cost is None or total < best_cost:
-                best_cost   = total
-                best_config = config
+            # Prefer more cards first, then lower cost
+            if best_solution is None or (coverage, -total) > (best_solution[0], -best_solution[1]):
+                best_solution = (coverage, total, config)
 
-    if not best_config:
+    if not best_solution:
         print("\nNo cards could be sourced from any vendor.")
         return
 
-    # Group best_config by vendor
+    _, best_cost, best_config = best_solution
+
+    # --- rest of your printing logic unchanged ---
     vendor_cards: dict[str, list[str]] = {v: [] for v in vendor_names}
     for card_lower, vendor in best_config.items():
         vendor_cards[vendor].append(card_lower)
@@ -83,23 +72,18 @@ def optimise_order(
     print("\n" + "═" * 60)
     print(f"  OPTIMAL ORDER  —  total incl. postage: ${best_cost / 100:.2f}")
     print("═" * 60)
-
     for vendor in vendor_names:
         card_list = vendor_cards[vendor]
         if not card_list:
             continue
-
-        results    = vendor_results[vendor]
-        postage    = POSTAGE[vendor]
-        cards_cost = sum(results[k].price_cents for k in card_list)
+        results     = vendor_results[vendor]
+        postage     = POSTAGE[vendor]
+        cards_cost  = sum(results[k].price_cents for k in card_list)
         order_total = cards_cost + postage
-
-        # Build display rows
         rows = []
         for card_lower in sorted(card_list, key=lambda k: results[k].price_cents):
             r = results[card_lower]
             rows.append((r.card_name, r.set_name, r.condition, str(r.qty), f"${r.price_cents / 100:.2f}"))
-
         _draw_order_table(
             title=f"Order from {vendor.title()}",
             rows=rows,
@@ -107,7 +91,6 @@ def optimise_order(
             cards_total=cards_cost,
             order_total=order_total,
         )
-
     if unsourceable:
         print(f"\n── Still unavailable ({len(unsourceable)}/{len(cards)}) ──")
         for c in unsourceable:
